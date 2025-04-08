@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dynamic Table Update</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            position: sticky;
+            top: 0;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .empty-table {
+            text-align: center;
+            color: #999;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Records Table</h1>
+    <table id="recordsTable">
+        <thead>
+            <tr>
+                <th>IP address</th>
+                <th>Latitude</th>
+                <th>Longitude</th>
+                <th>Delay</th>
+                <th>Suspicious</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr class="empty-table">
+                <td colspan="3">No records available yet</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <script>
+        // Function to fetch new records and update the table
+        function fetchNewRecords() {
+            $.ajax({
+                url: '/load',
+                type: 'GET',
+                dataType: 'json',
+                success: function(data) {
+                    if (data.records && data.records.length > 0) {
+                        // Remove the "empty table" row if it exists
+                        if ($('#recordsTable tbody tr.empty-table').length) {
+                            $('#recordsTable tbody').empty();
+                        }
+                        
+                        // Add new records to the table
+                        data.records.forEach(function(record) {
+                            let newRow = `
+                                <tr>
+                                    <td>${record.ip_address || 'None'}</td>
+                                    <td>${record.latitude || 'None'}</td>
+                                    <td>${record.longitude || 'None'}</td>
+                                    <td>${record.delay || 'None'}</td>
+                                    <td>${record.suspicious || 'None'}</td>
+                                </tr>`;
+                            $('#recordsTable tbody').append(newRow);
+                        });
+                    }
+                },
+                complete: function() {
+                    // Schedule the next poll
+                    setTimeout(fetchNewRecords, 1000); // Poll every 1 second
+                },
+                error: function(xhr, status, error) {
+                    console.error("Error fetching records:", error);
+                    // Retry after a longer delay if there's an error
+                    setTimeout(fetchNewRecords, 5000);
+                }
+            });
+        }
+
+        // Start polling when the page loads
+        $(document).ready(function() {
+            // Initial fetch immediately
+            fetchNewRecords();
+        });
+    </script>
+</body>
+</html>

@@ -1,12 +1,14 @@
 import pandas as pd
 import asyncio
 from contextvars import copy_context, ContextVar
-import json
+import requests
 
 
 class Scraper:
     # IP address and port of the server
-    delivery_address: str = '127.0.0.1:500'
+    delivery_address: str = '127.0.0.1:8000'
+    # Route for delivery
+    route = '/upload'
     # File name of the csv table
     dataset_name: str = 'ip_addresses'
     # Uploaded csv dataset
@@ -30,15 +32,27 @@ class Scraper:
 
         # Move timestamp to delay
         cleaned_df['Timestamp'] -= min(cleaned_df['Timestamp'])
-        cleaned_df = cleaned_df.rename(columns={'Timestamp': 'delay'})
+
+        # Rename columns
+        cleaned_df = cleaned_df.rename(
+            columns={
+                'ip address': 'ip_address',
+                'Latitude': 'latitude',
+                'Longitude': 'longitude',
+                'Timestamp': 'delay',
+            }
+        )
 
         return cleaned_df
 
     def _post_json(self, data: dict) -> None:
-        print(f"Posting a json: {json.dumps(data)}\n\n")
+        requests.post(
+            'http://' + self.delivery_address + self.route,
+            json=data
+        )
 
     def __init__(self,
-                 delivery_address: str = '127.0.0.1:500',
+                 delivery_address: str = '127.0.0.1:8000',
                  dataset_name: str = 'ip_addresses'):
         self.delivery_address = delivery_address
         self.dataset_name = dataset_name
