@@ -49,12 +49,14 @@
     </table>
 
     <script>
+        let nextIdx = 0;
         // Function to fetch new records and update the table
         function fetchNewRecords() {
             $.ajax({
                 url: '/load',
                 type: 'GET',
                 dataType: 'json',
+                data: {idx: nextIdx},
                 success: function(data) {
                     if (data.records && data.records.length > 0) {
                         // Remove the "empty table" row if it exists
@@ -69,11 +71,12 @@
                                     <td>${record.ip_address || 'None'}</td>
                                     <td>${record.latitude || 'None'}</td>
                                     <td>${record.longitude || 'None'}</td>
-                                    <td>${record.delay || 'None'}</td>
-                                    <td>${record.suspicious || 'None'}</td>
+                                    <td>${record.delay}</td>
+                                    <td>${record.suspicious ? 'True' : 'False'}</td>
                                 </tr>`;
                             $('#recordsTable tbody').append(newRow);
                         });
+                        nextIdx += data.records.length + 1;
                     }
                 },
                 complete: function() {

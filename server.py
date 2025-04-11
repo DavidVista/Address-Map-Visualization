@@ -1,5 +1,4 @@
 from flask import Flask, request, render_template, jsonify
-from collections import deque
 import logging
 
 app = Flask(__name__)
@@ -8,23 +7,24 @@ logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s %(levelname)s %(name)s %(threadName)s : %(message)s'
 )
-records_queue = deque()
+records_list = []
 
 
 @app.route('/upload', methods=['POST'])
 def upload_record():
-    global records_queue
+    global records_list
     record = request.json
-    records_queue.append(record)
+    records_list.append(record)
     return "200"
 
 
 @app.route('/load', methods=['GET'])
 def load_records():
-    global records_queue
+    global records_list
     records = []
-    while len(records_queue) > 0:
-        records.append(records_queue.popleft())
+    idx = request.args.get('idx', default=0, type=int)
+    for i in range(idx, len(records_list)):
+        records.append(records_list[i])
     return jsonify({'records': records})
 
 
