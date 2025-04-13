@@ -6,11 +6,11 @@ import requests
 
 class Scraper:
     # IP address and port of the server
-    delivery_address: str = '127.0.0.1:8000'
+    delivery_address: str
     # Route for delivery
-    route = '/upload'
+    route: str = '/upload'
     # File name of the csv table
-    dataset_name: str = 'ip_addresses'
+    dataset_name: str
     # Uploaded csv dataset
     dataframe: pd.DataFrame
 
@@ -52,7 +52,7 @@ class Scraper:
         )
 
     def __init__(self,
-                 delivery_address: str = '127.0.0.1:8000',
+                 delivery_address: str = '127.0.0.1:8080',
                  dataset_name: str = 'ip_addresses'):
         self.delivery_address = delivery_address
         self.dataset_name = dataset_name

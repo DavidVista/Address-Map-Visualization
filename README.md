@@ -5,10 +5,10 @@ First, the `scraper.py` script is used to fetch the incoming IP address informat
 
 ## Installation
 
-### Requirements
-- Python version >= 3.11
-
 ### Manual Setup
+
+#### Requirements
+- Python version >= 3.11
 
 1. Virtual Environment Setup:
 ```bash
@@ -20,4 +20,33 @@ python -m venv venv
 3. Install necessary requirements:
 ```bash
 pip install -r req.txt
+```
+
+4. Start the server:
+```bash
+python server/server.py
+```
+
+5. Start the scraper:
+```bash
+python scraper/scraper.py
+```
+
+6. Use browser to see the client-side of the application by visiting <a href="http://127.0.0.1:8080">the localhost address</a>.
+
+### Docker Compose
+
+#### Requirements
+- Docker
+
+1. Run the single command:
+```bash
+docker compose up
+```
+
+2. Use browser to see the client-side of the application by visiting <a href="http://127.0.0.1:8080">the localhost address</a>.
+
+3. Use the following command to stop the applications:
+```bash
+docker compose down
 ```

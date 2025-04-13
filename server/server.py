@@ -1,12 +1,6 @@
 from flask import Flask, request, render_template, jsonify
-import logging
 
 app = Flask(__name__)
-logging.basicConfig(
-    filename='record.log',
-    level=logging.DEBUG,
-    format='%(asctime)s %(levelname)s %(name)s %(threadName)s : %(message)s'
-)
 records_list = []
 
 
@@ -15,10 +9,10 @@ def upload_record():
     global records_list
     record = request.json
     records_list.append(record)
-    return "200"
+    return jsonify({"status": "success"}), 201
 
 
-@app.route('/load', methods=['GET'])
+@app.route('/download', methods=['GET'])
 def load_records():
     global records_list
     records = []
@@ -28,10 +22,10 @@ def load_records():
     return jsonify({'records': records})
 
 
-@app.route('/app', methods=['GET'])
+@app.route('/', methods=['GET'])
 def index():
-    return render_template('table.html')
+    return render_template('index.html')
 
 
 if __name__ == "__main__":
-    app.run(port=8000, debug=True)
+    app.run(port=8080, debug=True)

@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Network Traffic Visualization</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+    <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+    <div id="container">
+        <!-- Controls Panel -->
+        <div id="controls" class="panel">
+            <h3>Controls</h3>
+            <label>Time Scale: 
+                <input type="range" id="timeAccel" min="0.1" max="1" step="0.1" value="0.5">
+                <span id="timeValue" class="value-display">0.5x</span>
+            </label>
+            <label>Recent Locations: 
+                <select id="recentCount">
+                    <option value="10">10</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </label>
+        </div>
+        
+        <!-- Tooltip -->
+        <div id="tooltip"></div>
+        
+        <!-- Point Info Panel -->
+        <div id="pointInfo" class="point-info"></div>
+        
+        <!-- Recent Locations Table -->
+        <div id="recent-table" class="panel">
+            <h3>Recent Locations</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>IP</th>
+                        <th>Latitude</th>
+                        <th>Longitude</th>
+                        <th>Suspicious</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        
+        <!-- Toggled Locations Table -->
+        <div id="toggled-table" class="panel">
+            <h3>Highlighted Locations</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>IP</th>
+                        <th>Latitude</th>
+                        <th>Longitude</th>
+                        <th>Suspicious</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <button id="removeAllHighlighted" class="remove-all-btn">Remove All Highlights</button>
+        </div>
+
+        <div id="legend" class="panel">
+            <h3>Legend</h3>
+            
+            <div class="legend-item">
+                <div class="color-sample" style="background: #CF44F7;"></div>
+                <span>Recently fetched location</span>
+            </div>
+            
+            <div class="legend-item">
+                <div class="color-sample" style="background: #888888;"></div>
+                <span>Non-suspicious location</span>
+            </div>
+            
+            <div class="legend-item">
+                <div class="color-sample" style="background: #ff0000;"></div>
+                <span>Suspicious location</span>
+            </div>
+            
+            <div class="legend-item">
+                <div class="color-sample" style="background: #ffa500;"></div>
+                <span>Highlighted location</span>
+            </div>
+            
+            <div class="legend-item">
+                <div class="rod-sample" style="background: #ffa500;"></div>
+                <span>Highlighted location</span>
+            </div>
+            
+            <div class="legend-item">
+                <div class="rod-sample" style="background: #00ff00;"></div>
+                <span>Selected location from highlighted</span>
+            </div>
+            
+            <div id="attribution">
+                <p>Created by <strong>Ilya Grigorev, DS-01</strong></p>
+                <p>Powered by <a href="https://threejs.org/" target="_blank">Three.js</a></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // THREE.js Visualization Code
+        let scene, camera, renderer, controls, earth, clock;
+        let points = []; // Stores all points
+        let recentRecords = [];
+        let toggledPoints = []; // Stores toggled/highlighted points
+        let fixedPoint = null;  // Point that was last clicked
+        let TIME_ACCELERATION = 0.5;    // Sets delay for points appearance animation
+        let recentCount = 10;   // Limit the number of recent records
+        let hoveredPoint = null;    // Point that was last hovered
+        // Rods for points
+        const ROD_COLOR_HOVER = 0x00ff00; // Green
+        const ROD_COLOR_HIGHLIGHT = 0xffa500; // Orange
+        
+        // Initialize THREE.js scene
+        function initThreeJS() {
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000033);
+            
+            // Create camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 2.5;
+            
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('container').prepend(renderer.domElement);
+            
+            // Add controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.1;
+            controls.minDistance = 1.2;
+            controls.maxDistance = 4;
+            
+            // Create clock for animations
+            clock = new THREE.Clock();
+            
+            // Create Earth
+            const geometry = new THREE.SphereGeometry(1, 32, 32);
+            const texture = new THREE.TextureLoader().load('https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg');
+            const material = new THREE.MeshBasicMaterial({ map: texture });
+            earth = new THREE.Mesh(geometry, material);
+            scene.add(earth);
+            
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+            
+            // Start animation loop
+            animate();
+        }
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            const cameraDistance = camera.position.distanceTo(new THREE.Vector3(0, 0, 0));
+            const scale = scaleByDistance(cameraDistance);
+            points.forEach((point) => {
+                // Only scale if not currently animated
+                if (!point.userData.isAnimating) {
+                    point.scale.set(scale, scale, scale);
+                }
+            });
+            renderer.render(scene, camera);
+        }
+        
+        // Convert lat/long to 3D position
+        function latLongToVector3(lat, lon, radius) {
+            const phi = (90 - lat) * (Math.PI / 180);
+            const theta = (lon + 180) * (Math.PI / 180);
+            
+            return new THREE.Vector3(
+                - (radius * Math.sin(phi) * Math.cos(theta)),
+                radius * Math.cos(phi),
+                radius * Math.sin(phi) * Math.sin(theta)
+            );
+        }
+
+        // Smoothly scale points based on the zoom level
+        function scaleByDistance(cameraDistance) {
+            return -0.089*cameraDistance*cameraDistance+0.786*cameraDistance-0.714;
+        }
+        
+        // Add a point to the globe
+        function addPoint(record) {
+            const position = latLongToVector3(record.latitude, record.longitude, 1.001);
+            let color = 0xCF44F7;
+            const size = 0.01;
+            
+            const geometry = new THREE.SphereGeometry(size, 16, 16);
+            const material = new THREE.MeshBasicMaterial({ color });
+            let point = new THREE.Mesh(geometry, material);
+            point.position.copy(position);
+            point.userData = {
+                record: record,
+                isHighlighted: false,
+                isAnimating: true,
+                originalColor: color
+            };
+            
+            // Add animation for appearance
+            point.scale.set(0, 0, 0);
+            const duration = 1 / TIME_ACCELERATION;
+            const startTime = clock.getElapsedTime();
+            
+            // Scales a point up making it visible
+            const animateScaleUp = () => {
+                const elapsed = clock.getElapsedTime() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const scale = elasticOut(progress);
+                point.scale.set(scale, scale, scale);
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animateScaleUp);
+                }
+            };
+
+            // Downscales a point for the usual size
+            const animateScaleDown = () => {
+                const elapsed = clock.getElapsedTime() - startTime;
+                const progress = Math.min(elapsed / duration, 1); // Normalized progress [0-1]
+                const targetScale = scaleByDistance(camera.position.distanceTo(new THREE.Vector3(0, 0, 0)));
+                
+                // Interpolate from 1.0 to targetScale
+                // const scale = 1.0 + (targetScale - 1.0) * progress;
+                const scale = 4 * targetScale + (-3 * targetScale) * progress;
+                
+                point.scale.set(scale, scale, scale);
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animateScaleDown);
+                } else {
+                    // Animation complete
+                    point.userData.isAnimating = false;
+                    color = record.suspicious ? 0xff0000 : 0x888888;
+                    point.material.color.setHex(color);
+                    point.userData.originalColor = color;
+                }
+            };
+            
+            animateScaleUp();
+            animateScaleDown();
+            scene.add(point);
+
+            points.push(point);
+            
+            return point;
+        }
+        
+        // Elastic easing function for animations
+        function elasticOut(t) {
+            return Math.sin(-13.0 * (t + 1.0) * Math.PI/2) * Math.pow(2.0, -10.0 * t) + 1.0;
+        }
+        
+        // Update recent locations table
+        function updateRecentTable() {
+            const tableBody = $('#recent-table tbody');
+            tableBody.empty();
+            
+            recentRecords.slice(0, recentCount).forEach((record, index) => {
+                const row = $(`
+                    <tr class="table-row" data-index="${index}">
+                        <td>${record.ip_address || 'None'}</td>
+                        <td>${record.latitude.toFixed(4)}</td>
+                        <td>${record.longitude.toFixed(4)}</td>
+                        <td>${record.suspicious ? 'True' : 'False'}</td>
+                    </tr>
+                `);
+                
+                tableBody.append(row);
+            });
+        }
+        
+        // Update toggled locations table
+        function updateToggledTable() {
+            const tableBody = $('#toggled-table tbody');
+            tableBody.empty();
+            
+            toggledPoints.forEach((point, index) => {
+                const record = point.userData.record;
+                const row = $(`
+                    <tr class="table-row" data-index="${index}">
+                        <td>${record.ip_address || 'None'}</td>
+                        <td>${record.latitude.toFixed(4)}</td>
+                        <td>${record.longitude.toFixed(4)}</td>
+                        <td>${record.suspicious ? 'True' : 'False'}</td>
+                        <td><button class="remove-btn">Remove</button></td>
+                    </tr>
+                `);
+                
+                // Mouse enter handler - change rod color to green
+                row.mouseenter(() => {
+                    if (point.userData.lightRod) {
+                        point.userData.lightRod.material.color.setHex(ROD_COLOR_HOVER);
+                    }
+                });
+                
+                // Mouse leave handler - restore rod color
+                row.mouseleave(() => {
+                    if (point.userData.lightRod) {
+                        point.userData.lightRod.material.color.setHex(ROD_COLOR_HIGHLIGHT);
+                    }
+                });
+                
+                // Click handler for remove button
+                row.find('.remove-btn').click(() => {
+                    togglePointHighlight(point);
+                });
+                
+                tableBody.append(row);
+            });
+        }
+
+        // Creates a rod on the specified point
+        function createRod(point, color) {
+            const scale = scaleByDistance(camera.position.distanceTo(new THREE.Vector3(0, 0, 0)));
+
+            const rodGeometry = new THREE.CylinderGeometry(
+                scale * 0.05,
+                scale * 0.01,
+                1.5,
+                8
+            );
+            const rodMaterial = new THREE.MeshBasicMaterial({
+                color: color,
+                transparent: true,
+                opacity: 0.8
+            });
+            
+            const rod = new THREE.Mesh(rodGeometry, rodMaterial);
+            
+            // Position rod perpendicular to earth surface
+            const pointPosition = point.position.clone().normalize();
+            rod.quaternion.setFromUnitVectors(
+                new THREE.Vector3(0, 1, 0),
+                pointPosition
+            );
+            
+            // Position rod extending from point
+            rod.position.copy(point.position)
+                .add(pointPosition.clone().multiplyScalar(0.75));
+            
+            return rod;
+        }
+        
+        // Toggle point highlight
+        function togglePointHighlight(point) {
+            const isHighlighted = !point.userData.isHighlighted;
+            point.userData.isHighlighted = isHighlighted;
+            
+            if (isHighlighted) {
+                // Change point color to orange
+                point.material.color.setHex(0xffa500);
+                
+                const rod = createRod(point, ROD_COLOR_HIGHLIGHT);
+                
+                // Position rod perpendicular to earth surface
+                const pointPosition = point.position.clone().normalize();
+                rod.quaternion.setFromUnitVectors(
+                    new THREE.Vector3(0, 1, 0),
+                    pointPosition
+                );
+                
+                // Position rod extending from point
+                rod.position.copy(point.position)
+                    .add(pointPosition.clone().multiplyScalar(0.75));
+                
+                // Store rod reference in point userData
+                point.userData.lightRod = rod;
+                scene.add(rod);
+                
+                // Add to toggled points array
+                if (!toggledPoints.includes(point)) {
+                    toggledPoints.push(point);
+                }
+            } else {
+                // Restore original color
+                point.material.color.setHex(point.userData.originalColor);
+                
+                // Remove light rod
+                if (point.userData.lightRod) {
+                    scene.remove(point.userData.lightRod);
+                    point.userData.lightRod.geometry.dispose();
+                    point.userData.lightRod.material.dispose();
+                    point.userData.lightRod = null;
+                }
+                
+                // Remove from toggled points array
+                const index = toggledPoints.indexOf(point);
+                if (index > -1) {
+                    toggledPoints.splice(index, 1);
+                }
+            }
+            
+            updateToggledTable();
+        }
+
+        // Handle hover effects
+        function handlePointHover(point) {
+            if (hoveredPoint === point) return;
+            
+            // Reset previous hovered point
+            if (hoveredPoint && !hoveredPoint.userData.isHighlighted) {
+                hoveredPoint.material.color.setHex(hoveredPoint.userData.originalColor);
+            }
+            
+            // Set new hovered point
+            hoveredPoint = point;
+            if (point && !point.userData.isHighlighted) {
+                point.material.color.setHex(0xffa500); // Orange
+            }
+        }
+        
+        // Initialize event listeners
+        function initEventListeners() {
+            // Slider for time acceleration
+            $('#timeAccel').on('input', function() {
+                TIME_ACCELERATION = parseFloat(this.value);
+                $('#timeValue').text(TIME_ACCELERATION + 'x');
+            });
+            
+            // Dropdown for recent locations count
+            $('#recentCount').change(function() {
+                recentCount = parseInt(this.value);
+                updateRecentTable();
+            });
+            
+            // Mouse move for tooltip
+            document.addEventListener('mousemove', (event) => {
+                if (fixedPoint) return;
+                
+                const mouse = new THREE.Vector2(
+                    (event.clientX / window.innerWidth) * 2 - 1,
+                    - (event.clientY / window.innerHeight) * 2 + 1
+                );
+                
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(mouse, camera);
+                
+                const intersects = raycaster.intersectObjects(points);
+                
+                if (intersects.length > 0) {
+                    const point = intersects[0].object;
+                    const record = point.userData.record;
+                    
+                    // Handle hover color change
+                    handlePointHover(point);
+                    
+                    // Show tooltip with conditional background
+                    $('#tooltip').html(
+                        `IP: ${record.ip_address}<br>` +
+                        `Latitude: ${record.latitude.toFixed(4)}<br>` +
+                        `Longitude: ${record.longitude.toFixed(4)}`
+                    ).css({
+                        display: 'block',
+                        left: event.clientX + 15,
+                        top: event.clientY + 15,
+                        background: record.suspicious ? 'rgba(255, 0, 0, 0.85)' : 'rgba(0, 0, 0, 0.85)'
+                    });
+                } else {
+                    // Reset hover when no intersection
+                    handlePointHover(null);
+                    $('#tooltip').hide();
+                }
+            });
+            
+            // Click to show fixed info
+            document.addEventListener('click', (event) => {
+                const mouse = new THREE.Vector2(
+                    (event.clientX / window.innerWidth) * 2 - 1,
+                    - (event.clientY / window.innerHeight) * 2 + 1
+                );
+                
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(mouse, camera);
+                
+                const intersects = raycaster.intersectObjects(points);
+                
+                if (intersects.length > 0) {
+                    const point = intersects[0].object;
+                    
+                    if (fixedPoint === point) {
+                        // Clicking the same point again - just toggle the info panel
+                        $('#pointInfo').toggle();
+                    } else {
+                        // Show info for new point
+                        showPointInfo(point, event);
+                    }
+                } else {
+                    // Clicked empty space - hide info panel
+                    $('#pointInfo').hide();
+                    fixedPoint = null;
+                }
+            });
+        }
+        
+        // Show detailed point information
+        function showPointInfo(point, event) {
+            const record = point.userData.record;
+            fixedPoint = point;
+            
+            const isHighlighted = point.userData.isHighlighted;
+            
+            $('#pointInfo').html(`
+                <h4>Location Details</h4>
+                <p><strong>IP:</strong> ${record.ip_address}</p>
+                <p><strong>Coordinates:</strong> ${record.latitude.toFixed(4)}, ${record.longitude.toFixed(4)}</p>
+                <p><strong>Suspicious:</strong> ${record.suspicious ? 'Yes' : 'No'}</p>
+                <button id="toggleHighlight" class="btn ${isHighlighted ? 'btn-untoggle' : ''}">
+                    ${isHighlighted ? 'Remove Highlight' : 'Highlight Location'}
+                </button>
+            `).css({
+                display: 'block',
+                left: event.clientX + 15,
+                top: event.clientY + 15
+            });
+            
+            // Toggle highlight functionality
+            $('#toggleHighlight').click(() => {
+                const nowHighlighted = togglePointHighlight(point);
+                
+                // Update the button text and style
+                if (nowHighlighted) {
+                    $('#toggleHighlight')
+                        .text('Remove Highlight')
+                        .addClass('btn-untoggle');
+                } else {
+                    $('#toggleHighlight')
+                        .text('Highlight Location')
+                        .removeClass('btn-untoggle');
+                }
+            });
+        }
+        
+        // Fetch new records from server
+        let nextIdx = 0;
+        
+        function fetchNewRecords() {
+            $.ajax({
+                url: '/download',
+                type: 'GET',
+                dataType: 'json',
+                data: { idx: nextIdx },
+                success: function(data) {
+                    if (data.records && data.records.length > 0) {
+                        data.records.forEach(function(record) {
+                            addPoint(record);
+                            recentRecords.unshift(record);
+                        });
+                        
+                        updateRecentTable();
+                        nextIdx += data.records.length;
+                    }
+                },
+                complete: function() {
+                    setTimeout(fetchNewRecords, 1000);
+                },
+                error: function(xhr, status, error) {
+                    console.error("Error fetching records:", error);
+                    setTimeout(fetchNewRecords, 5000);
+                }
+            });
+        }
+        
+        // Initialize everything when page loads
+        $(document).ready(function() {
+            initThreeJS();
+            initEventListeners();
+            fetchNewRecords();
+
+            // Add remove all button handler
+            $('#removeAllHighlighted').click(() => {
+                // Create a copy to avoid modification during iteration
+                const pointsToRemove = [...toggledPoints];
+                pointsToRemove.forEach(point => {
+                    togglePointHighlight(point);
+                });
+            });
+        });
+    </script>
+</body>
+</html>
