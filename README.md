@@ -32,7 +32,7 @@ python server/server.py
 python scraper/scraper.py
 ```
 
-6. Use browser to see the client-side of the application by visiting <a href="http://127.0.0.1:8080">the localhost address</a>.
+6. Use browser to see the client-side of the application by visiting <a href="http://127.0.0.1:8080">http://127.0.0.1:8080</a>.
 
 ### Docker Compose
 
@@ -41,10 +41,10 @@ python scraper/scraper.py
 
 1. Run the single command:
 ```bash
-docker compose up
+docker compose up -d
 ```
 
-2. Use browser to see the client-side of the application by visiting <a href="http://127.0.0.1:8080">the localhost address</a>.
+2. Use browser to see the client-side of the application by visiting <a href="http://127.0.0.1:8080">http://127.0.0.1:8080</a>.
 
 3. Use the following command to stop the applications:
 ```bash

@@ -1,0 +1,24 @@
+services:
+  server:
+    build: ./server
+    image: server:latest
+    container_name: server
+    networks:
+      - server_net
+    expose:
+      - 8080
+    ports:
+      - 127.0.0.1:8080:8080
+  
+  scraper:
+    build: ./scraper
+    image: scraper:latest
+    container_name: scraper
+    networks:
+      - server_net
+    depends_on:
+      - server
+
+networks:
+  server_net:
+    driver: bridge
