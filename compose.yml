@@ -6,9 +6,9 @@ services:
     networks:
       - server_net
     expose:
-      - 8080
+      - 8050
     ports:
-      - 127.0.0.1:8080:8080
+      - "127.0.0.1:8050:8050"
   
   scraper:
     build: ./scraper

@@ -52,7 +52,7 @@ class Scraper:
         )
 
     def __init__(self,
-                 delivery_address: str = '127.0.0.1:8080',
+                 delivery_address: str = 'server:8050',
                  dataset_name: str = 'ip_addresses'):
         self.delivery_address = delivery_address
         self.dataset_name = dataset_name
